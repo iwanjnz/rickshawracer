@@ -46,9 +46,11 @@
   }
 
   let leftTile = null, rightTile = null;
-  const TILE_H = 220;
+  const TILE_H = 240;
 
-  function buildSideTile(seed) {
+  // Building facades (lit windows, balconies) as seen from a high, near-overhead
+  // angle, echoing the reference photo's night street rather than a flat rooftop view.
+  function buildSideTile(seed, roadEdge) {
     const rng = mulberry32(seed);
     const margin = Math.max(roadLeft, 70);
     const w = Math.ceil(margin) + 2;
@@ -57,48 +59,71 @@
     tile.height = TILE_H;
     const tctx = tile.getContext("2d");
 
-    // base ground / alley colour
-    tctx.fillStyle = "#0a0d14";
+    // alley / sidewalk base
+    tctx.fillStyle = "#070911";
     tctx.fillRect(0, 0, w, TILE_H);
 
-    const palette = ["#1c2230", "#222a3b", "#192030", "#252d40"];
+    const palette = ["#1b212e", "#202738", "#171c28", "#232b3d", "#1d2433"];
     let y = 0;
     while (y < TILE_H) {
-      const blockH = rand(60, 130);
-      const inset = rand(2, 10);
-      const blockW = w - inset;
+      const blockH = Math.min(rand(80, 160), TILE_H - y);
+      const setback = rand(3, 14);
+      const blockW = Math.max(20, w - setback);
+      const bx = roadEdge === "right" ? 0 : w - blockW;
       tctx.fillStyle = pick(palette);
-      tctx.fillRect(0, y, blockW, Math.min(blockH, TILE_H - y));
-      // roof edge highlight
-      tctx.fillStyle = "rgba(255,255,255,0.05)";
-      tctx.fillRect(0, y, blockW, 2);
-      // scattered terrace lights
-      const lights = Math.floor(rng() * 4);
-      for (let i = 0; i < lights; i++) {
-        const lx = rng() * (blockW - 10) + 4;
-        const ly = y + rng() * (Math.min(blockH, TILE_H - y) - 10) + 4;
-        tctx.fillStyle = rng() > 0.5 ? "rgba(255,196,90,0.85)" : "rgba(140,190,255,0.5)";
-        tctx.fillRect(lx, ly, 3, 3);
+      tctx.fillRect(bx, y, blockW, blockH);
+
+      // window grid
+      const colW = 11, rowH = 16, gap = 3;
+      const cols = Math.max(1, Math.floor((blockW - gap) / colW));
+      const rows = Math.max(1, Math.floor((blockH - 10) / rowH));
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const wx = bx + gap + c * colW;
+          const wy = y + 8 + r * rowH;
+          if (wy + 9 > y + blockH) continue;
+          if (rng() < 0.32) {
+            const warm = rng() > 0.3;
+            tctx.fillStyle = warm ? "rgba(255,200,110,0.92)" : "rgba(170,212,255,0.55)";
+            tctx.shadowColor = warm ? "rgba(255,178,90,0.85)" : "rgba(150,200,255,0.5)";
+            tctx.shadowBlur = 3;
+            tctx.fillRect(wx, wy, colW - gap, 9);
+            tctx.shadowBlur = 0;
+          } else {
+            tctx.fillStyle = "rgba(0,0,0,0.22)";
+            tctx.fillRect(wx, wy, colW - gap, 9);
+          }
+        }
       }
-      // occasional water tank
-      if (rng() > 0.55 && blockW > 30) {
-        const tx = rng() * (blockW - 20) + 10;
-        const ty = y + rand(10, Math.max(12, Math.min(blockH, TILE_H - y) - 10));
-        tctx.fillStyle = "#0d1118";
-        tctx.beginPath();
-        tctx.arc(tx, ty, 6, 0, Math.PI * 2);
-        tctx.fill();
-        tctx.strokeStyle = "rgba(255,255,255,0.08)";
-        tctx.stroke();
+
+      // balcony ledges
+      for (let r = 3; r < rows; r += 4) {
+        tctx.fillStyle = "rgba(0,0,0,0.28)";
+        tctx.fillRect(bx, y + 8 + r * rowH - 3, blockW, 2);
       }
-      y += blockH + rand(4, 14);
+
+      // roofline highlight
+      tctx.fillStyle = "rgba(255,255,255,0.07)";
+      tctx.fillRect(bx, y, blockW, 2);
+
+      // warm light spill catching the edge nearest the street
+      const spillGrad = tctx.createLinearGradient(
+        roadEdge === "right" ? bx + blockW : bx, y,
+        roadEdge === "right" ? bx + blockW - 16 : bx + 16, y
+      );
+      spillGrad.addColorStop(0, "rgba(255,160,70,0.16)");
+      spillGrad.addColorStop(1, "rgba(255,160,70,0)");
+      tctx.fillStyle = spillGrad;
+      tctx.fillRect(bx, y, blockW, blockH);
+
+      y += blockH + rand(3, 10);
     }
     return tile;
   }
 
   function buildSideTiles() {
-    leftTile = buildSideTile(7);
-    rightTile = buildSideTile(99);
+    leftTile = buildSideTile(7, "right");
+    rightTile = buildSideTile(99, "left");
   }
 
   // ---------- Game constants ----------
@@ -121,8 +146,10 @@
   let spawnTimer = 0;
   let roadDashOffset = 0;
   let buildingOffset = 0;
+  let lampOffset = 0;
   let elapsed = 0;
   let state = "start"; // start | playing | gameover | win
+  const LAMP_SPACING = 280;
 
   const OBSTACLE_TYPES = {
     auto: { w: 42, h: 60, body: "#caa400", roof: "#16161a", kind: "auto" },
@@ -138,6 +165,7 @@
     spawnTimer = 0.6;
     roadDashOffset = 0;
     buildingOffset = 0;
+    lampOffset = 0;
     elapsed = 0;
     player.x = (roadLeft + roadRight) / 2;
     player.vx = 0;
@@ -246,6 +274,7 @@
     distance += speed * dt;
     roadDashOffset = (roadDashOffset + speed * dt) % 80;
     buildingOffset = (buildingOffset + speed * dt * 0.85) % TILE_H;
+    lampOffset = (lampOffset + speed * dt) % LAMP_SPACING;
 
     // spawn
     spawnTimer -= dt;
@@ -286,6 +315,23 @@
   }
 
   // ---------- Drawing ----------
+  // Headlight beam spilling forward onto the road, like the glowing fronts in the
+  // reference photo. Drawn before the body so the body's front edge caps it off.
+  function drawHeadlightCone(w, h, len) {
+    const nearW = w * 0.55, farW = w * 1.5;
+    const grad = ctx.createLinearGradient(0, -h / 2 + 4, 0, -h / 2 - len);
+    grad.addColorStop(0, "rgba(255,244,200,0.45)");
+    grad.addColorStop(1, "rgba(255,244,200,0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(-nearW / 2, -h / 2 + 4);
+    ctx.lineTo(nearW / 2, -h / 2 + 4);
+    ctx.lineTo(farW / 2, -h / 2 - len);
+    ctx.lineTo(-farW / 2, -h / 2 - len);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   function drawVehicle(o) {
     const { x, y, w, h } = o;
     const t = o.type;
@@ -306,6 +352,8 @@
       return;
     }
 
+    drawHeadlightCone(w, h, h * 0.9);
+
     roundRect(-w / 2, -h / 2, w, h, 8);
     ctx.fillStyle = t.body;
     ctx.fill();
@@ -316,18 +364,21 @@
       ctx.fill();
     }
 
-    // headlight glow (forward = up)
+    // headlight units (forward = up)
     ctx.fillStyle = "rgba(255,250,210,0.95)";
     ctx.shadowColor = "rgba(255,235,150,0.9)";
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 12;
     ctx.fillRect(-w / 2 + 4, -h / 2 + 2, 6, 4);
     ctx.fillRect(w / 2 - 10, -h / 2 + 2, 6, 4);
     ctx.shadowBlur = 0;
 
-    // taillight (rear = down, toward viewer)
-    ctx.fillStyle = "rgba(255,60,60,0.9)";
-    ctx.fillRect(-w / 2 + 4, h / 2 - 6, 5, 4);
-    ctx.fillRect(w / 2 - 9, h / 2 - 6, 5, 4);
+    // taillight glow (rear = down, toward viewer)
+    ctx.fillStyle = "rgba(255,70,60,0.55)";
+    ctx.shadowColor = "rgba(255,60,50,0.7)";
+    ctx.shadowBlur = 6;
+    ctx.fillRect(-w / 2 + 3, h / 2 - 7, 7, 5);
+    ctx.fillRect(w / 2 - 10, h / 2 - 7, 7, 5);
+    ctx.shadowBlur = 0;
 
     ctx.restore();
   }
@@ -338,6 +389,9 @@
     ctx.rotate(player.tilt);
 
     const w = player.w, h = player.h;
+
+    drawHeadlightCone(w, h, h * 1.1);
+
     roundRect(-w / 2, -h / 2, w, h, 9);
     ctx.fillStyle = "#ffce1f";
     ctx.fill();
@@ -350,19 +404,41 @@
     ctx.fillStyle = "#1f7bd6";
     ctx.fillRect(-3, -h / 2 + 4, 6, h - 8);
 
-    // headlight glow
+    // headlight units
     ctx.fillStyle = "rgba(255,255,235,1)";
     ctx.shadowColor = "rgba(255,245,180,1)";
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 14;
     ctx.fillRect(-w / 2 + 4, -h / 2 + 1, 7, 4);
     ctx.fillRect(w / 2 - 11, -h / 2 + 1, 7, 4);
     ctx.shadowBlur = 0;
 
-    ctx.fillStyle = "rgba(255,60,60,0.9)";
-    ctx.fillRect(-w / 2 + 4, h / 2 - 6, 5, 4);
-    ctx.fillRect(w / 2 - 9, h / 2 - 6, 5, 4);
+    ctx.fillStyle = "rgba(255,70,60,0.6)";
+    ctx.shadowColor = "rgba(255,60,50,0.7)";
+    ctx.shadowBlur = 6;
+    ctx.fillRect(-w / 2 + 3, h / 2 - 7, 7, 5);
+    ctx.fillRect(w / 2 - 10, h / 2 - 7, 7, 5);
+    ctx.shadowBlur = 0;
 
     ctx.restore();
+  }
+
+  function drawLamp(x, y) {
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, 76);
+    glow.addColorStop(0, "rgba(255,196,110,0.28)");
+    glow.addColorStop(0.5, "rgba(255,170,90,0.10)");
+    glow.addColorStop(1, "rgba(255,170,90,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, 76, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(255,225,170,0.95)";
+    ctx.shadowColor = "rgba(255,200,120,0.9)";
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
   }
 
   function roundRect(x, y, w, h, r) {
@@ -378,14 +454,14 @@
   function render() {
     ctx.clearRect(0, 0, viewW, viewH);
 
-    // sky/ground backdrop
+    // night backdrop
     const grad = ctx.createLinearGradient(0, 0, 0, viewH);
-    grad.addColorStop(0, "#070a12");
-    grad.addColorStop(1, "#0c1018");
+    grad.addColorStop(0, "#050710");
+    grad.addColorStop(1, "#0b0f17");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, viewW, viewH);
 
-    // rooftops either side, tiled & scrolling
+    // building facades either side, tiled & scrolling (slightly slower for parallax depth)
     if (leftTile) {
       const off = buildingOffset % TILE_H;
       for (let y = -TILE_H + off; y < viewH; y += TILE_H) {
@@ -395,13 +471,19 @@
     }
 
     // road surface
-    ctx.fillStyle = "#1a1d24";
+    ctx.fillStyle = "#1c1e26";
     ctx.fillRect(roadLeft, 0, roadWidth, viewH);
 
     // curbs
     ctx.fillStyle = "rgba(255,255,255,0.12)";
     ctx.fillRect(roadLeft - 4, 0, 4, viewH);
     ctx.fillRect(roadRight, 0, 4, viewH);
+
+    // street lamps & their warm glow pools, scrolling with the road
+    for (let y = -LAMP_SPACING + lampOffset; y < viewH; y += LAMP_SPACING) {
+      drawLamp(roadLeft - 10, y);
+      drawLamp(roadRight + 10, y);
+    }
 
     // lane dashes
     const segW = roadWidth / SEGMENTS;
@@ -415,6 +497,13 @@
 
     for (const o of obstacles) drawVehicle(o);
     if (state === "playing" || state === "gameover") drawPlayer();
+
+    // atmospheric haze fading the far distance, like the soft top of the photo
+    const haze = ctx.createLinearGradient(0, 0, 0, viewH * 0.4);
+    haze.addColorStop(0, "rgba(6,9,16,0.6)");
+    haze.addColorStop(1, "rgba(6,9,16,0)");
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, 0, viewW, viewH * 0.4);
   }
 
   // ---------- Loop ----------
