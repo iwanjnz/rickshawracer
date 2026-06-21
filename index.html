@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0e16" />
+<title>Rickshaw Racer · Hyderabad</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div id="route-label">Lord of the Drinks → Trident Hyderabad</div>
+    <div id="progress-track">
+      <div id="progress-fill"></div>
+      <div id="progress-marker">🛺</div>
+    </div>
+  </div>
+
+  <button id="left-btn" class="swerve-btn" aria-label="Swerve left">◀</button>
+  <button id="right-btn" class="swerve-btn" aria-label="Swerve right">▶</button>
+
+  <div id="start-screen" class="overlay">
+    <h1>🛺 Rickshaw Racer</h1>
+    <p class="subtitle">Hyderabad Night Run</p>
+    <p class="brief">
+      Get the rickshaw from <strong>Lord of the Drinks</strong> brewery back to the
+      <strong>Trident</strong> without hitting traffic on the way.
+    </p>
+    <p class="brief">Hold the left/right edges of the screen (or arrow keys) to swerve.</p>
+    <button id="start-btn" class="primary-btn">Start the Engine</button>
+    <p id="best-stat" class="best-stat"></p>
+  </div>
+
+  <div id="gameover-screen" class="overlay hidden">
+    <h1>Crashed! 💥</h1>
+    <p class="brief">You made it <span id="gameover-progress">0</span>% of the way home.</p>
+    <button id="retry-btn" class="primary-btn">Try Again</button>
+  </div>
+
+  <div id="win-screen" class="overlay hidden">
+    <h1>🏆 Welcome Home!</h1>
+    <p class="brief">You parked safely at the Trident in <span id="win-time">0</span>s.</p>
+    <button id="again-btn" class="primary-btn">Race Again</button>
+  </div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
