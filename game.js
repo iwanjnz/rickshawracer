@@ -48,8 +48,45 @@
   let leftTile = null, rightTile = null;
   const TILE_H = 240;
 
+  // ---------- Photo building strips ----------
+  // Real aerial night-street crops, vertically mirror-tiled (flip every other
+  // copy) so the seams land on matching rows instead of a random hard cut.
+  const STREET_PHOTO_H = 703;
+  let streetLeftImg = new Image();
+  let streetRightImg = new Image();
+  let streetLeftFlipped = null, streetRightFlipped = null;
+  let streetPhotosReady = false;
+
+  function flipVertical(img) {
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const cctx = c.getContext("2d");
+    cctx.translate(0, c.height);
+    cctx.scale(1, -1);
+    cctx.drawImage(img, 0, 0);
+    return c;
+  }
+
+  (function loadStreetPhotos() {
+    let loaded = 0;
+    function onLoad() {
+      loaded++;
+      if (loaded === 2) {
+        streetLeftFlipped = flipVertical(streetLeftImg);
+        streetRightFlipped = flipVertical(streetRightImg);
+        streetPhotosReady = true;
+      }
+    }
+    streetLeftImg.onload = onLoad;
+    streetRightImg.onload = onLoad;
+    streetLeftImg.src = "assets/building-left.png";
+    streetRightImg.src = "assets/building-right.png";
+  })();
+
   // Building facades (lit windows, balconies) as seen from a high, near-overhead
   // angle, echoing the reference photo's night street rather than a flat rooftop view.
+  // Used as a fallback until the real photo strips above have finished loading.
   function buildSideTile(seed, roadEdge) {
     const rng = mulberry32(seed);
     const margin = Math.max(roadLeft, 70);
@@ -462,7 +499,21 @@
     ctx.fillRect(0, 0, viewW, viewH);
 
     // building facades either side, tiled & scrolling (slightly slower for parallax depth)
-    if (leftTile) {
+    if (streetPhotosReady) {
+      const margin = Math.max(roadLeft, 70);
+      const scroll = distance * 0.85;
+      let n = Math.floor((-STREET_PHOTO_H - scroll) / STREET_PHOTO_H);
+      for (;;) {
+        const sy = n * STREET_PHOTO_H + scroll;
+        if (sy > viewH) break;
+        const flip = (((n % 2) + 2) % 2) === 1;
+        const lImg = flip ? streetLeftFlipped : streetLeftImg;
+        const rImg = flip ? streetRightFlipped : streetRightImg;
+        ctx.drawImage(lImg, 0, sy, margin, STREET_PHOTO_H);
+        ctx.drawImage(rImg, viewW - margin, sy, margin, STREET_PHOTO_H);
+        n++;
+      }
+    } else if (leftTile) {
       const off = buildingOffset % TILE_H;
       for (let y = -TILE_H + off; y < viewH; y += TILE_H) {
         ctx.drawImage(leftTile, 0, y);
